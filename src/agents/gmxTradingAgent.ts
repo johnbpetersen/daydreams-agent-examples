@@ -1,22 +1,28 @@
-// src/agents/gmxTradingAgent.ts
+import { createDreams, cli } from "@daydreamsai/core/v1";
+import { getGMXPrice } from "../utils/gmxContracts";
 
-// Print a startup message immediately
 console.log("GMX Trading Agent is launching...");
 
-// Import the necessary functions from the Daydreams core package
-import { createDreams, cli } from "@daydreamsai/core/v1";
+// Using a dummy model object to bypass the type error.
+// This is a temporary workaround until you're ready to integrate a real language model.
+const dummyModel = { name: "dummy-model" } as any;
 
-// Create the agent instance with a model identifier and an extension
 const agent = createDreams({
-  model: "deepseek-r1-distill-llama-70b",
+  model: dummyModel,
   extensions: [cli],
 });
 
-// Start the agent and log the outcome
 agent
   .start()
-  .then(() => {
-    console.log("GMX Trading Agent started successfully.");
+  .then(async () => {
+    console.log("Agent started successfully.");
+
+    try {
+      const price = await getGMXPrice();
+      console.log("Current GMX Market Price:", price);
+    } catch (error) {
+      console.error("Error fetching GMX price:", error);
+    }
   })
   .catch((error) => {
     console.error("Failed to start GMX Trading Agent:", error);
