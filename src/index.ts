@@ -34,7 +34,6 @@ async function main() {
       console.log("Token In:", order.tokenIn);
       console.log("Token Out:", order.tokenOut);
       console.log("Amount In:", order.amountIn);
-      console.log("Minimum Out:", order.minOut);
 
       const proceed = await askQuestion("\nProceed with trade? (yes/no): ");
       if (proceed.toLowerCase() === "yes") {
