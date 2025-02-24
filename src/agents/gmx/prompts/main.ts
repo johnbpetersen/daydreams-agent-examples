@@ -1,6 +1,6 @@
 // src/agents/gmx/prompts/main.ts
 
-import { createPrompt, createParser } from "@daydreamsai/core/v1";
+import { createPrompt, createParser } from "@daydreamsai/core";
 import { z } from "zod";
 import { Groq } from "groq-sdk";
 import dotenv from "dotenv";
