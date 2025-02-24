@@ -1,13 +1,15 @@
+import { startDiscordBot } from "./utils/discord";
 import { monitorToken } from "./agents/gmx/signals/monitor";
 
-// Define the ETH rule with a threshold of 0.1% drop for testing
-const ethRule = { token: "WETH", threshold: 0.001 };
+// Boot the Discord agent before starting monitoring.
+(async () => {
+  await startDiscordBot();
+  console.log("Agent booted in monitor process. Starting monitoring...");
 
-// Start the monitor: Check WETH price every 10 seconds
-setInterval(() => {
-  monitorToken(ethRule);
-}, 10000);
+  // Now set up your monitoring rule for WETH (or your desired token)
+  const wethRule = { token: "WETH", threshold: 0.001 };
 
-console.log(
-  "Buy signal monitor started for WETH. Checking every 10 seconds..."
-);
+  setInterval(() => {
+    monitorToken(wethRule);
+  }, 10000); // check every 10 seconds
+})();

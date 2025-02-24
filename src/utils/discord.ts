@@ -1,38 +1,44 @@
-import { createDreams } from "@daydreamsai/core";
-import { discord } from "@daydreamsai/core/extensions";
+import { Client, GatewayIntentBits, TextChannel } from "discord.js";
+import type { Signal } from "../agents/gmx/signals/types";
 
-// Create a minimal agent with the Discord extension.
-// We use a dummy model since we're only using the Discord functionality.
-const agent = createDreams({
-  model: "dummy-model",
-  extensions: [discord],
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
 });
 
-/**
- * Starts the Daydreams Discord Bot.
- * This initializes the connection using the DISCORD_TOKEN from your environment.
- */
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
+
 export async function startDiscordBot(): Promise<void> {
-  console.log("Starting Daydreams Discord Bot...");
-  await agent.start();
-  console.log("Daydreams Discord Bot started");
+  if (!DISCORD_TOKEN) {
+    console.log("No Discord token found, skipping Discord integration");
+    return;
+  }
+  try {
+    await client.login(DISCORD_TOKEN);
+    console.log("Discord bot connected");
+  } catch (error) {
+    console.error("Failed to start Discord bot:", error);
+  }
 }
 
-/**
- * Sends a Discord notification when a buy signal is triggered.
- * @param signal - An object containing the buy alert details.
- */
-export async function sendDiscordNotification(signal: any): Promise<void> {
-  const message = `Buy Signal Detected for ${signal.token}:
-Current Price: $${signal.currentPrice}
-Baseline Price: $${signal.averagePrice}
-Drop: ${(signal.percentageDrop * 100).toFixed(2)}%
-Action: ${signal.suggestedAction}`;
+export async function sendDiscordNotification(signal: Signal): Promise<void> {
+  if (!DISCORD_CHANNEL_ID || !client.isReady()) return;
+
+  const messageContent = `🚨 **Buy Signal Detected** 🚨
+    
+**Token:** ${signal.token}
+**Current Price:** $${signal.currentPrice.toFixed(2)}
+**Baseline Price:** $${signal.averagePrice.toFixed(2)}
+**Drop:** ${(signal.percentageDrop * 100).toFixed(2)}%
+**Action:** ${signal.suggestedAction}
+**Time:** ${new Date(signal.timestamp).toLocaleString()}`;
 
   try {
-    // Send the message using the Discord extension.
-    await agent.extensions.discord.sendMessage({ content: message });
-    console.log("Discord notification sent");
+    const channel = await client.channels.fetch(DISCORD_CHANNEL_ID);
+    if (channel instanceof TextChannel) {
+      await channel.send(messageContent);
+      console.log("Discord notification sent");
+    }
   } catch (error) {
     console.error("Error sending Discord notification:", error);
   }
