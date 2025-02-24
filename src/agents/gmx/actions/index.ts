@@ -10,6 +10,12 @@ import {
   GMX_RPC_URL,
   PRIVATE_KEY,
 } from "../config";
+// Rename the imported functions to avoid naming conflicts.
+import {
+  getExpectedOutput as importedGetExpectedOutput,
+  computeMinOut as importedComputeMinOut,
+  getTokenPrice,
+} from "./priceOracle";
 
 dotenv.config();
 
@@ -34,12 +40,11 @@ const ERC20_ABI = [
 ];
 
 // --- Contract Instances ---
+// GMX Vault instance (for price data)
 const gmxVault = new ethers.Contract(GMX_VAULT_ADDRESS, VAULT_ABI, provider);
 
-// Instantiate the GMX Router with the wallet as signer.
+// Instantiate the GMX Router with wallet as signer.
 const gmxRouter = new ethers.Contract(GMX_ROUTER_ADDRESS, ROUTER_ABI, wallet);
-
-// --- Helper Functions ---
 
 /**
  * Looks up token configuration by symbol.
@@ -58,9 +63,6 @@ function getTokenConfig(tokenSymbol: string): {
 
 /**
  * Approves the GMX Router to spend a specified amount of the given token.
- *
- * @param tokenSymbol The symbol of the token to approve (e.g., "WETH", "USDC").
- * @param amount The amount to approve, as a number.
  */
 export async function approveToken(
   tokenSymbol: string,
@@ -75,7 +77,6 @@ export async function approveToken(
     console.log(
       `Submitting approval for GMX Router to spend ${tokenSymbol}...`
     );
-    // Use two-step casting if needed for ethers v6 (here we assume it's not needed, adjust if it is)
     const tx = await (tokenWithSigner as any).approve(
       GMX_ROUTER_ADDRESS,
       amountBN
@@ -91,9 +92,9 @@ export async function approveToken(
 
 /**
  * Executes a swap trade on GMX using the Router contract.
- *
- * @param order Contains tokenIn, tokenOut, amountIn, and minOut (all in human-readable format).
- * @returns The transaction receipt.
+ * Converts human‑readable amounts to BigNumbers using token decimals,
+ * computes minOut dynamically via our price oracle,
+ * checks allowance if needed, and then executes the swap.
  */
 export async function placeTrade(
   order: TradeParameters
@@ -103,29 +104,56 @@ export async function placeTrade(
     const tokenInConfig = getTokenConfig(order.tokenIn);
     const tokenOutConfig = getTokenConfig(order.tokenOut);
 
-    // Convert amounts using the appropriate decimals.
+    // Convert amountIn using tokenIn decimals.
     const amountInBN = ethers.parseUnits(
       order.amountIn.toString(),
       tokenInConfig.decimals
     );
-    const minOutBN = ethers.parseUnits(
-      order.minOut.toString(),
-      tokenOutConfig.decimals
+
+    // Compute minOut dynamically using our helper.
+    const computedMinOut = await importedComputeMinOut(
+      order.tokenIn,
+      order.tokenOut,
+      order.amountIn,
+      order.slippage ?? 0.02
     );
 
-    // For orders where tokenIn requires approval (e.g. an ERC20 token), check allowance.
-    // Here we assume that if tokenIn is not native (like ETH), it needs approval.
+    // Convert with maximum precision
+    const minOutStr = computedMinOut.toFixed(tokenOutConfig.decimals);
+    const finalMinOutBN = ethers.parseUnits(minOutStr, tokenOutConfig.decimals);
+
+    // Add more debug logging
+    console.log(`
+Detailed conversion steps:
+1. Raw computedMinOut: ${computedMinOut}
+2. Formatted with decimals: ${minOutStr}
+3. As BigNumber: ${finalMinOutBN.toString()}
+4. Token decimals: ${tokenOutConfig.decimals}
+`);
+
+    // Verify the values are reasonable
+    if (
+      finalMinOutBN.toString() === "0" ||
+      finalMinOutBN.toString() === "225"
+    ) {
+      throw new Error(
+        `Invalid minOut value calculated: ${finalMinOutBN.toString()}`
+      );
+    }
+
+    // For non-native tokens, check allowance.
     if (order.tokenIn.toUpperCase() !== "ETH") {
       const tokenContract = new ethers.Contract(
         tokenInConfig.address,
         ERC20_ABI,
         provider
       );
-      const currentAllowance = await tokenContract.allowance(
+      const currentAllowance: bigint = await tokenContract.allowance(
         wallet.address,
         GMX_ROUTER_ADDRESS
       );
-      if (currentAllowance.lt(amountInBN)) {
+      console.log(`DEBUG: Current allowance: ${currentAllowance}`);
+      if (currentAllowance < amountInBN) {
         console.log("Allowance insufficient, approving token...");
         await approveToken(order.tokenIn, order.amountIn);
       } else {
@@ -133,19 +161,24 @@ export async function placeTrade(
       }
     }
 
+    // Log the trade parameters.
     console.log("Executing swap with parameters:");
     console.log("Path:", [tokenInConfig.address, tokenOutConfig.address]);
-    console.log("Amount In:", amountInBN.toString());
-    console.log("Min Out:", minOutBN.toString());
-    console.log("Receiver:", wallet.address);
+    console.log("Amount In (BigNumber):", amountInBN.toString());
+    console.log("Final minOut (BigNumber):", finalMinOutBN.toString());
+    console.log(
+      `DEBUG: tokenIn ${order.tokenIn} decimals: ${tokenInConfig.decimals}`
+    );
+    console.log(
+      `DEBUG: tokenOut ${order.tokenOut} decimals: ${tokenOutConfig.decimals}`
+    );
+    console.log(`DEBUG: amountIn (human-readable): ${order.amountIn}`);
 
-    // Call the swap function on the router.
-    // If you encounter type errors with connect, use a two-step cast as shown below.
-    const routerWithSigner = gmxRouter; // gmxRouter is already instantiated with wallet as signer.
-    const tx = await (routerWithSigner as unknown as any).swap(
+    // Execute the swap via the GMX Router.
+    const tx = await (gmxRouter as any).swap(
       [tokenInConfig.address, tokenOutConfig.address],
       amountInBN,
-      minOutBN,
+      finalMinOutBN,
       wallet.address,
       { value: 0n }
     );

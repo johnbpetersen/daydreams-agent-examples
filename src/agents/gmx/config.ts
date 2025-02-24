@@ -70,22 +70,16 @@ export const TOKEN_CONFIG: Record<
       process.env.CRV_ADDRESS || "0x11cDb42B0EB46D95f990BeDD4695A6e3fA034978",
     decimals: 18,
   },
-  // 10. ApeCoin (APE)
-  APE: {
-    address:
-      process.env.APE_ADDRESS || "0x7f9FBf9bDd3F4105C478b996B648FE6e828a1e98",
-    decimals: 18,
-  },
   // 11. USDS Stablecoin (USDS)
   USDS: {
     address:
       process.env.USDS_ADDRESS || "0x6491c05A82219b8D1479057361ff1654749b876b",
     decimals: 18,
   },
-  // 12. Pepe Coin (PEPE)
-  PEPE: {
+  // 13. GMX (GMX)
+  GMX: {
     address:
-      process.env.PEPE_ADDRESS || "0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00",
+      process.env.GMX_ADDRESS || "0xfc5a1a6eb076aef2c3dc2b192745c52ba2a2f33a",
     decimals: 18,
   },
 };
