@@ -11,40 +11,47 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!, // Use your actual API key here
 });
 
-// Updated schema: we do not require minOut since it will be computed on-chain.
-export const tradeParametersSchema = z.object({
+// Updated schema now includes a commandType field.
+export const commandParametersSchema = z.object({
+  commandType: z.enum(["trade", "alert"]),
   tokenIn: z.string().min(1, "tokenIn is required"),
   tokenOut: z.string().min(1, "tokenOut is required"),
   amountIn: z.number().positive("amountIn must be positive"),
-  slippage: z.number().optional(), // Optional custom slippage override.
+  // Allow null and transform null to a default value of 0.02
+  slippage: z
+    .number()
+    .nullable()
+    .optional()
+    .transform((val) => (val === null ? 0.02 : val)),
 });
 
-// Export the TradeParameters type.
-export type TradeParameters = z.infer<typeof tradeParametersSchema>;
+// Export the CommandParameters type.
+export type CommandParameters = z.infer<typeof commandParametersSchema>;
 
 // Create a prompt that instructs the AI to output ONLY a JSON object wrapped in a markdown code block.
+// The JSON object should include the new commandType field along with the trade parameters.
 export const tradeCommandPrompt = createPrompt(
   `You are a JSON-only trading command parser for a crypto trading bot.
 Return ONLY a JSON object (wrapped in a markdown code block with "json") with the following keys:
+- commandType: either "trade" or "alert"
 - tokenIn: the token symbol to spend (e.g. "USDC", "WETH", "LINK")
-- tokenOut: the token symbol to receive
+- tokenOut: the token symbol to receive (or monitor in the case of alerts)
 - amountIn: a positive number representing the input amount (human-readable)
 - slippage: an optional positive number representing the desired slippage (e.g., 0.01 for 1%)
-
 Your output MUST be wrapped in a markdown code block. Do not include any extra text.
 
 Example:
-Input: "sell $0.77 USDC for WETH with 1% slippage"
+Input: "trade! buy $0.77 USDC for WETH with 1% slippage"
 Output:
 \`\`\`json
-{"tokenIn": "USDC", "tokenOut": "WETH", "amountIn": 0.77, "slippage": 0.01}
+{"commandType": "trade", "tokenIn": "USDC", "tokenOut": "WETH", "amountIn": 0.77, "slippage": 0.01}
 \`\`\``,
   (args: { command: string }) => ({ command: args.command })
 );
 
-// Create a parser that extracts and validates the JSON object using our schema.
+// Create a parser that extracts and validates the JSON object using our updated schema.
 export const tradeCommandParser = createParser<
-  { think?: string; output: TradeParameters | null },
+  { think?: string; output: CommandParameters | null },
   {}
 >(
   () => ({
@@ -55,19 +62,19 @@ export const tradeCommandParser = createParser<
       state.think = element.content;
     },
     json: (state, element) => {
-      state.output = tradeParametersSchema.parse(JSON.parse(element.content));
+      state.output = commandParametersSchema.parse(JSON.parse(element.content));
     },
   }
 );
 
 /**
  * Calls Deepseek via the Groq SDK to parse a natural language trading command.
- * This function removes any <think> tags, extracts the JSON block, and validates it.
+ * This function removes any <think> tags, extracts the JSON block, transforms keys as needed, and validates the output.
  *
  * @param command The natural language trading command.
- * @returns A Promise resolving to trade parameters.
+ * @returns A Promise resolving to command parameters (including commandType).
  */
-async function queryDeepseek(command: string): Promise<TradeParameters> {
+async function queryDeepseek(command: string): Promise<CommandParameters> {
   // Call the actual Deepseek API via Groq.
   const completion = (await groq.chat.completions.create({
     messages: [
@@ -75,7 +82,7 @@ async function queryDeepseek(command: string): Promise<TradeParameters> {
         role: "system",
         content: `You are a JSON-only trading command parser for a crypto trading bot.
 Return ONLY a JSON object (wrapped in a markdown code block with "json") with the following keys:
-{"tokenIn": "<token symbol to spend>", "tokenOut": "<token symbol to receive>", "amountIn": <number>, "slippage": <number (optional)>}
+{"commandType": "<trade or alert>", "tokenIn": "<token symbol to spend>", "tokenOut": "<token symbol to receive>", "amountIn": <number>, "slippage": <number (optional)>}
 Do not include any extra text.`,
       },
       {
@@ -110,29 +117,37 @@ Do not include any extra text.`,
   const jsonStr = jsonMatch[0];
   console.log("Extracted JSON:", jsonStr);
 
-  const parsed = JSON.parse(jsonStr);
-  return tradeParametersSchema.parse(parsed);
+  // Parse the JSON.
+  const parsedObj = JSON.parse(jsonStr);
+
+  // Transform the parsed object: if "amount" exists but "amountIn" does not, assign it.
+  if (parsedObj.amount !== undefined && parsedObj.amountIn === undefined) {
+    parsedObj.amountIn = parsedObj.amount;
+  }
+
+  return commandParametersSchema.parse(parsedObj);
 }
 
 /**
- * Parses a natural language trading command into structured trade parameters.
+ * Parses a natural language trading command into structured command parameters.
  * This function calls the Deepseek integration and returns the result.
  *
  * @param command The natural language trading command.
- * @returns A Promise resolving to trade parameters.
+ * @returns A Promise resolving to command parameters.
  */
 export async function parseTradeCommand(
   command: string
-): Promise<TradeParameters> {
+): Promise<CommandParameters> {
   console.log("Processing trade command:", command);
   try {
-    const tradeParams = await queryDeepseek(command);
-    console.log("Deepseek returned:", JSON.stringify(tradeParams, null, 2));
-    return tradeParams;
+    const commandParams = await queryDeepseek(command);
+    console.log("Deepseek returned:", JSON.stringify(commandParams, null, 2));
+    return commandParams;
   } catch (error: any) {
     console.error("Error processing trade command:", error);
-    // Instead of using arbitrary defaults, signal failure.
+    // Signal failure by returning a default error object.
     return {
+      commandType: "trade",
       tokenIn: "ERROR",
       tokenOut: "ERROR",
       amountIn: 0,

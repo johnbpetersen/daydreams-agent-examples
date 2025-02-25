@@ -1,7 +1,7 @@
 // src/agents/gmx/actions/index.ts
 
 import { ethers } from "ethers";
-import type { TradeParameters } from "../prompts/main";
+import type { CommandParameters } from "../prompts/main";
 import dotenv from "dotenv";
 import {
   TOKEN_CONFIG,
@@ -97,7 +97,7 @@ export async function approveToken(
  * checks allowance if needed, and then executes the swap.
  */
 export async function placeTrade(
-  order: TradeParameters
+  order: CommandParameters
 ): Promise<ethers.TransactionReceipt> {
   try {
     // Look up token configurations for tokenIn and tokenOut.
@@ -110,6 +110,23 @@ export async function placeTrade(
       tokenInConfig.decimals
     );
 
+    // Debug logging: Show conversion details.
+    console.log(`DEBUG: order.amountIn (human-readable): ${order.amountIn}`);
+    console.log(
+      `DEBUG: tokenIn (${order.tokenIn}) decimals: ${tokenInConfig.decimals}`
+    );
+    console.log(`DEBUG: Converted amountInBN: ${amountInBN.toString()}`);
+
+    // Compute expected output for the trade.
+    const expectedOutput = await importedGetExpectedOutput(
+      order.tokenIn,
+      order.tokenOut,
+      order.amountIn
+    );
+    console.log(
+      `DEBUG: Expected output from getExpectedOutput: ${expectedOutput}`
+    );
+
     // Compute minOut dynamically using our helper.
     const computedMinOut = await importedComputeMinOut(
       order.tokenIn,
@@ -117,21 +134,43 @@ export async function placeTrade(
       order.amountIn,
       order.slippage ?? 0.02
     );
+    console.log(`DEBUG: Raw computedMinOut: ${computedMinOut}`);
 
-    // Convert with maximum precision
-    const minOutStr = computedMinOut.toFixed(tokenOutConfig.decimals);
+    // Use floor rounding to avoid rounding up.
+    const factor = Math.pow(10, tokenOutConfig.decimals);
+    const rawMinOutUnits = Math.floor(computedMinOut * factor);
+    console.log(
+      `DEBUG: Raw computedMinOut in token units (before adjustment): ${computedMinOut * factor}`
+    );
+    console.log(`DEBUG: Floored minOut units (raw): ${rawMinOutUnits}`);
+
+    // For tokens with non-18 decimals (e.g., WBTC with 8 decimals), subtract 1 unit for safety.
+    let adjustedMinOutUnits = rawMinOutUnits;
+    if (tokenOutConfig.decimals !== 18) {
+      adjustedMinOutUnits = Math.max(rawMinOutUnits - 1, 0);
+      console.log(
+        `DEBUG: Adjusted minOut units after subtracting 1: ${adjustedMinOutUnits}`
+      );
+    }
+
+    const minOutStr = (adjustedMinOutUnits / factor).toFixed(
+      tokenOutConfig.decimals
+    );
     const finalMinOutBN = ethers.parseUnits(minOutStr, tokenOutConfig.decimals);
 
-    // Add more debug logging
+    // Log detailed conversion steps.
     console.log(`
 Detailed conversion steps:
 1. Raw computedMinOut: ${computedMinOut}
-2. Formatted with decimals: ${minOutStr}
-3. As BigNumber: ${finalMinOutBN.toString()}
-4. Token decimals: ${tokenOutConfig.decimals}
+2. Computed in token units (raw): ${computedMinOut * factor}
+3. Floored token units: ${rawMinOutUnits}
+4. Adjusted token units: ${adjustedMinOutUnits}
+5. Formatted with decimals: ${minOutStr}
+6. As BigNumber: ${finalMinOutBN.toString()}
+7. Token decimals (tokenOut): ${tokenOutConfig.decimals}
 `);
 
-    // Verify the values are reasonable
+    // Verify the values are reasonable.
     if (
       finalMinOutBN.toString() === "0" ||
       finalMinOutBN.toString() === "225"
@@ -152,13 +191,28 @@ Detailed conversion steps:
         wallet.address,
         GMX_ROUTER_ADDRESS
       );
-      console.log(`DEBUG: Current allowance: ${currentAllowance}`);
+      console.log(
+        `DEBUG: Current allowance for ${order.tokenIn}: ${currentAllowance}`
+      );
       if (currentAllowance < amountInBN) {
         console.log("Allowance insufficient, approving token...");
         await approveToken(order.tokenIn, order.amountIn);
       } else {
         console.log("Sufficient allowance exists.");
       }
+    }
+
+    // Log wallet balance for tokenIn.
+    {
+      const tokenContract = new ethers.Contract(
+        tokenInConfig.address,
+        ERC20_ABI,
+        provider
+      );
+      const balanceBN: bigint = await tokenContract.balanceOf(wallet.address);
+      console.log(
+        `DEBUG: Wallet balance for ${order.tokenIn}: ${balanceBN.toString()}`
+      );
     }
 
     // Log the trade parameters.
@@ -173,6 +227,20 @@ Detailed conversion steps:
       `DEBUG: tokenOut ${order.tokenOut} decimals: ${tokenOutConfig.decimals}`
     );
     console.log(`DEBUG: amountIn (human-readable): ${order.amountIn}`);
+
+    // Optionally, call the router's getAmountOut function for comparison.
+    try {
+      const routerAmountOutBN = await gmxRouter.getAmountOut(
+        tokenInConfig.address,
+        tokenOutConfig.address,
+        amountInBN
+      );
+      console.log(
+        `DEBUG: Router.getAmountOut returned: ${routerAmountOutBN.toString()}`
+      );
+    } catch (err) {
+      console.log("DEBUG: Router.getAmountOut not available or failed", err);
+    }
 
     // Execute the swap via the GMX Router.
     const tx = await (gmxRouter as any).swap(
