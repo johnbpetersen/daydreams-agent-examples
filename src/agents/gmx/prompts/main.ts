@@ -1,4 +1,11 @@
 // src/agents/gmx/prompts/main.ts
+// -------------------------------------------------------------
+// Description: Parses natural language trading commands into structured command
+// parameters using Deepseek via the Groq SDK. The output JSON includes a commandType,
+// tokenIn, tokenOut, amountIn, and an optional slippage. If the LLM returns "amount"
+// instead of "amountIn", it is transformed accordingly.
+// Last Update: feat(prompts): Added commandType & amount transformation, removed extraneous logs
+// -------------------------------------------------------------
 
 import { createPrompt, createParser } from "@daydreamsai/core";
 import { z } from "zod";
@@ -17,7 +24,7 @@ export const commandParametersSchema = z.object({
   tokenIn: z.string().min(1, "tokenIn is required"),
   tokenOut: z.string().min(1, "tokenOut is required"),
   amountIn: z.number().positive("amountIn must be positive"),
-  // Allow null and transform null to a default value of 0.02
+  // Allow null and transform null to a default value of 0.02.
   slippage: z
     .number()
     .nullable()
@@ -68,14 +75,16 @@ export const tradeCommandParser = createParser<
 );
 
 /**
+ * queryDeepseek
+ *
  * Calls Deepseek via the Groq SDK to parse a natural language trading command.
- * This function removes any <think> tags, extracts the JSON block, transforms keys as needed, and validates the output.
+ * It removes any <think> tags, extracts the JSON block, transforms keys as needed,
+ * and validates the output.
  *
  * @param command The natural language trading command.
  * @returns A Promise resolving to command parameters (including commandType).
  */
 async function queryDeepseek(command: string): Promise<CommandParameters> {
-  // Call the actual Deepseek API via Groq.
   const completion = (await groq.chat.completions.create({
     messages: [
       {
@@ -95,19 +104,14 @@ Do not include any extra text.`,
     max_tokens: 1500,
   })) as { choices: { message: { content: string } }[] };
 
-  console.log("Full API Response:", JSON.stringify(completion, null, 2));
-
   const content = completion.choices?.[0]?.message?.content;
   if (!content) {
     throw new Error("No content in response from Deepseek.");
   }
 
   let cleaned = content.trim();
-  console.log("Raw response:", cleaned);
-
-  // Remove any <think> tags if present.
+  // Remove any <think> tags.
   cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-  console.log("Response after stripping <think> tags:", cleaned);
 
   // Extract the JSON block using a regex.
   const jsonMatch = cleaned.match(/{[\s\S]*}/);
@@ -115,7 +119,6 @@ Do not include any extra text.`,
     throw new Error("No valid JSON found in Deepseek response");
   }
   const jsonStr = jsonMatch[0];
-  console.log("Extracted JSON:", jsonStr);
 
   // Parse the JSON.
   const parsedObj = JSON.parse(jsonStr);
@@ -130,7 +133,6 @@ Do not include any extra text.`,
 
 /**
  * Parses a natural language trading command into structured command parameters.
- * This function calls the Deepseek integration and returns the result.
  *
  * @param command The natural language trading command.
  * @returns A Promise resolving to command parameters.

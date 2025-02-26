@@ -1,3 +1,11 @@
+// src/agents/gmx/types.ts
+// -------------------------------------------------------------
+// Description: Defines GMX-specific types for the trading agent, including
+//   TradeParameters (inferred from the tradeParametersSchema), ActionResult,
+//   and ApprovalResult. Extend these types as needed.
+// Last Update: chore: Added header documentation and last update summary
+// -------------------------------------------------------------
+
 import { z } from "zod";
 import { tradeParametersSchema } from "./prompts/schema";
 

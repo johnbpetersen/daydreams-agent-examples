@@ -1,3 +1,11 @@
+// src/utils/discord.ts
+// -------------------------------------------------------------
+// Description: Encapsulates the Discord integration for the GMX Trading Agent.
+//   Provides functions to start the Discord bot and send notifications (e.g.,
+//   buy signal alerts) to a specified Discord channel.
+// Last Update: chore(discord): Cleaned up logging and added header documentation
+// -------------------------------------------------------------
+
 import { Client, GatewayIntentBits, TextChannel } from "discord.js";
 import type { Signal } from "../agents/gmx/signals/types";
 
@@ -8,6 +16,10 @@ const client = new Client({
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
 
+/**
+ * Starts the Discord bot using the provided DISCORD_TOKEN.
+ * Logs connection success or error.
+ */
 export async function startDiscordBot(): Promise<void> {
   if (!DISCORD_TOKEN) {
     console.log("No Discord token found, skipping Discord integration");
@@ -21,6 +33,12 @@ export async function startDiscordBot(): Promise<void> {
   }
 }
 
+/**
+ * Sends a Discord notification to the designated channel with the buy signal details.
+ *
+ * @param signal - The buy signal information including token, current price,
+ *                 baseline price, percentage drop, action, and timestamp.
+ */
 export async function sendDiscordNotification(signal: Signal): Promise<void> {
   if (!DISCORD_CHANNEL_ID || !client.isReady()) return;
 

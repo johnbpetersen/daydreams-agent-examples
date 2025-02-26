@@ -1,4 +1,12 @@
 // src/agents/gmx/actions/index.ts
+// -------------------------------------------------------------
+// Description: Contains GMX-specific trading actions for the GMX Trading Agent.
+//   This module sets up the blockchain provider and wallet, interacts with the GMX Vault
+//   and Router contracts, checks token allowances, and executes swap trades.
+//   Detailed logs trace conversion steps for amount conversion, minOut computation,
+//   and other key parameters.
+// Last Update: feat(actions): Refactored trade execution with detailed conversion logs and allowance checks
+// -------------------------------------------------------------
 
 import { ethers } from "ethers";
 import type { CommandParameters } from "../prompts/main";
@@ -48,7 +56,7 @@ const gmxRouter = new ethers.Contract(GMX_ROUTER_ADDRESS, ROUTER_ABI, wallet);
 
 /**
  * Looks up token configuration by symbol.
- * Throws an error if the token is not found.
+ * @throws Error if the token config is not found.
  */
 function getTokenConfig(tokenSymbol: string): {
   address: string;
@@ -63,6 +71,8 @@ function getTokenConfig(tokenSymbol: string): {
 
 /**
  * Approves the GMX Router to spend a specified amount of the given token.
+ * @param tokenSymbol - The token symbol.
+ * @param amount - The human-readable amount to approve.
  */
 export async function approveToken(
   tokenSymbol: string,
@@ -92,15 +102,16 @@ export async function approveToken(
 
 /**
  * Executes a swap trade on GMX using the Router contract.
- * Converts human‑readable amounts to BigNumbers using token decimals,
- * computes minOut dynamically via our price oracle,
- * checks allowance if needed, and then executes the swap.
+ * Converts human-readable amounts to BigNumbers using token decimals,
+ * computes minOut dynamically, checks allowance if needed, and executes the swap.
+ * @param order - The trade order parameters.
+ * @returns The transaction receipt.
  */
 export async function placeTrade(
   order: CommandParameters
 ): Promise<ethers.TransactionReceipt> {
   try {
-    // Look up token configurations for tokenIn and tokenOut.
+    // Lookup token configurations.
     const tokenInConfig = getTokenConfig(order.tokenIn);
     const tokenOutConfig = getTokenConfig(order.tokenOut);
 
@@ -109,8 +120,6 @@ export async function placeTrade(
       order.amountIn.toString(),
       tokenInConfig.decimals
     );
-
-    // Debug logging: Show conversion details.
     console.log(`DEBUG: order.amountIn (human-readable): ${order.amountIn}`);
     console.log(
       `DEBUG: tokenIn (${order.tokenIn}) decimals: ${tokenInConfig.decimals}`
@@ -127,7 +136,7 @@ export async function placeTrade(
       `DEBUG: Expected output from getExpectedOutput: ${expectedOutput}`
     );
 
-    // Compute minOut dynamically using our helper.
+    // Compute minOut using our price oracle.
     const computedMinOut = await importedComputeMinOut(
       order.tokenIn,
       order.tokenOut,
@@ -136,7 +145,7 @@ export async function placeTrade(
     );
     console.log(`DEBUG: Raw computedMinOut: ${computedMinOut}`);
 
-    // Use floor rounding to avoid rounding up.
+    // Convert computedMinOut to token units.
     const factor = Math.pow(10, tokenOutConfig.decimals);
     const rawMinOutUnits = Math.floor(computedMinOut * factor);
     console.log(
@@ -144,7 +153,7 @@ export async function placeTrade(
     );
     console.log(`DEBUG: Floored minOut units (raw): ${rawMinOutUnits}`);
 
-    // For tokens with non-18 decimals (e.g., WBTC with 8 decimals), subtract 1 unit for safety.
+    // For tokens with non-18 decimals, subtract 1 unit for safety.
     let adjustedMinOutUnits = rawMinOutUnits;
     if (tokenOutConfig.decimals !== 18) {
       adjustedMinOutUnits = Math.max(rawMinOutUnits - 1, 0);
@@ -158,7 +167,6 @@ export async function placeTrade(
     );
     const finalMinOutBN = ethers.parseUnits(minOutStr, tokenOutConfig.decimals);
 
-    // Log detailed conversion steps.
     console.log(`
 Detailed conversion steps:
 1. Raw computedMinOut: ${computedMinOut}
@@ -170,7 +178,7 @@ Detailed conversion steps:
 7. Token decimals (tokenOut): ${tokenOutConfig.decimals}
 `);
 
-    // Verify the values are reasonable.
+    // Validate minOut value.
     if (
       finalMinOutBN.toString() === "0" ||
       finalMinOutBN.toString() === "225"
@@ -228,7 +236,7 @@ Detailed conversion steps:
     );
     console.log(`DEBUG: amountIn (human-readable): ${order.amountIn}`);
 
-    // Optionally, call the router's getAmountOut function for comparison.
+    // Optionally, attempt to call router.getAmountOut for comparison.
     try {
       const routerAmountOutBN = await gmxRouter.getAmountOut(
         tokenInConfig.address,

@@ -1,10 +1,18 @@
+// src/utils/groq.ts
+// -------------------------------------------------------------
+// Description: Provides utility functions to query Deepseek via the Groq SDK.
+//   It parses natural language trading commands and extracts a JSON object
+//   containing trade parameters (tokenIn, tokenOut, amountIn, and minOut).
+// Last Update: chore: Removed fallback defaults for error handling
+// -------------------------------------------------------------
+
 import { Groq } from "groq-sdk";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!, // Make sure GROQ_API_KEY is set in your .env
+  apiKey: process.env.GROQ_API_KEY!, // Ensure GROQ_API_KEY is set in your .env
 });
 
 interface DeepseekResponse {
@@ -23,8 +31,11 @@ export interface TradeParameters {
 }
 
 /**
+ * queryDeepseek
+ *
  * Calls Deepseek via Groq to parse a natural language trading command.
- * Strips out <think> tags, splits by newline, and extracts the last valid JSON.
+ * It removes <think> tags, splits the response by newline, and extracts the
+ * last valid JSON line. The parsed JSON is validated and returned as trade parameters.
  *
  * @param command The natural language trading command.
  * @returns A Promise resolving to structured trade parameters.
@@ -56,7 +67,7 @@ IMPORTANT: Return ONLY the JSON object.`,
       max_tokens: 1500,
     })) as DeepseekResponse;
 
-    console.log("Full API Response:", JSON.stringify(completion, null, 2));
+    // console.log("Full API Response:", JSON.stringify(completion, null, 2));
 
     const content = completion.choices?.[0]?.message?.content;
     if (!content) {
@@ -64,13 +75,13 @@ IMPORTANT: Return ONLY the JSON object.`,
     }
 
     let trimmed = content.trim();
-    console.log("Raw response:", trimmed);
+    // console.log("Raw response:", trimmed);
 
-    // Remove <think> tags
+    // Remove <think> tags.
     trimmed = trimmed.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-    console.log("Response after stripping <think> tags:", trimmed);
+    // console.log("Response after stripping <think> tags:", trimmed);
 
-    // Split by newline and find a valid JSON line (from the bottom)
+    // Split by newline and find a valid JSON line (from the bottom).
     const lines = trimmed.split("\n").map((line) => line.trim());
     let jsonStr = "";
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -82,7 +93,7 @@ IMPORTANT: Return ONLY the JSON object.`,
     if (!jsonStr) {
       throw new Error("No valid JSON found in response");
     }
-    console.log("Extracted JSON:", jsonStr);
+    // console.log("Extracted JSON:", jsonStr);
 
     const parsed = JSON.parse(jsonStr);
     if (
@@ -96,12 +107,7 @@ IMPORTANT: Return ONLY the JSON object.`,
     return parsed;
   } catch (err: any) {
     console.error("Error parsing trade command:", err);
-    // Fallback defaults if Deepseek fails (you can adjust these if needed)
-    return {
-      tokenIn: "0x82af49447d8a07e3bd95bd0d56f35241523fbab1", // WETH
-      tokenOut: "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8", // USDC
-      amountIn: 0.0001,
-      minOut: 0.27,
-    };
+    // No fallback defaults: throw error to ensure proper handling.
+    throw err;
   }
 }

@@ -1,17 +1,14 @@
 // src/agents/gmx/config.ts
+// -------------------------------------------------------------
+// Description: Contains configuration for the GMX Trading Agent on Arbitrum.
+//   This includes static token mappings (addresses and decimals) and essential
+//   contract addresses (GMX router, vault, RPC URL, and private key).
+// Last Update: chore(config): initial token mapping and contract address configuration
+// -------------------------------------------------------------
 
 import dotenv from "dotenv";
 dotenv.config();
 
-/**
- * TOKEN_CONFIG
- *
- * A static mapping of popular tokens on Arbitrum.
- * Each entry includes the token's contract address and decimals.
- * If the address isn’t known, the value is left as an empty string.
- *
- * You can update these values by setting environment variables.
- */
 export const TOKEN_CONFIG: Record<
   string,
   { address: string; decimals: number }

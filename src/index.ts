@@ -1,9 +1,18 @@
+// src/index.ts
+// -------------------------------------------------------------
+// Description: Unified entry point for the GMX Trading Agent.
+//   Initializes the Discord bot for command handling (processing both
+//   trade and alert commands) and starts continuous alert monitoring.
+//   Only messages that explicitly start with the bot mention are processed.
+// Last Update: feat: Consolidated Discord command & alert monitoring into one entry point
+// -------------------------------------------------------------
+
 import { startDiscordBot } from "./utils/discord";
 import { startAlertMonitoring } from "./agents/gmx/alerts/alertManager";
 import { Client, GatewayIntentBits } from "discord.js";
 import { parseTradeCommand } from "./agents/gmx/prompts/main";
-import { placeTrade } from "./agents/gmx/actions/index";
 import { parseAlertCommand } from "./agents/gmx/prompts/alert";
+import { placeTrade } from "./agents/gmx/actions/index";
 import { registerCustomAlert } from "./agents/gmx/alerts/alertManager";
 import {
   getExpectedOutput,
@@ -24,64 +33,56 @@ const discordClient = new Client({
   ],
 });
 
+// Log when the client is ready.
 discordClient.once("ready", () => {
   console.log(
     `Discord Bot for commands logged in as ${discordClient.user?.tag}`
   );
 });
 
+// Process only messages that start with a bot mention.
 discordClient.on("messageCreate", async (message) => {
-  // Log every received message (for debugging).
+  if (message.author.bot) return;
+
+  // Create a regex to match a bot mention at the start (handles both <@id> and <@!id> formats).
+  const botId = discordClient.user?.id;
+  const botMentionRegex = new RegExp(`^<@!?${botId}>`, "i");
+  if (!botMentionRegex.test(message.content)) {
+    return;
+  }
+
   console.log(
     `Discord message received from ${message.author.tag}: ${message.content}`
   );
+  console.log("Processing Discord command:", message.content);
 
-  // Ignore messages sent by bots.
-  if (message.author.bot) return;
+  try {
+    await message.channel.send("Command received! Processing...");
 
-  // Check if the message starts with a mention of our bot.
-  const botId = discordClient.user?.id;
-  const botMention1 = `<@${botId}>`;
-  const botMention2 = `<@!${botId}>`;
-  if (
-    message.content.startsWith(botMention1) ||
-    message.content.startsWith(botMention2)
-  ) {
-    console.log("Processing Discord command:", message.content);
+    // Strip the bot mention from the message.
+    const commandText = message.content.replace(botMentionRegex, "").trim();
+    console.log("Command text after removing mention:", commandText);
+    console.log("Lowercased command text:", commandText.toLowerCase());
 
-    try {
-      await message.channel.send("Command received! Processing...");
-
-      // Remove the bot mention.
-      let commandText = message.content;
-      if (commandText.startsWith(botMention1)) {
-        commandText = commandText.replace(botMention1, "").trim();
-      } else if (commandText.startsWith(botMention2)) {
-        commandText = commandText.replace(botMention2, "").trim();
-      }
-      console.log("Command text after removing mention:", commandText);
-      console.log("Lowercased command text:", commandText.toLowerCase());
-
-      // Use regex to check for the word "alert" anywhere.
-      if (/\balert\b/i.test(commandText)) {
-        console.log("Processing alert command...");
-        const parsedAlert = await parseAlertCommand(commandText);
-        console.log("Parsed alert command:", parsedAlert);
-        await registerAlert(parsedAlert, message);
-        const confirmationMsg = `Alert has been registered successfully! I'll notify you when the price of ${parsedAlert.token} drops by ${(parsedAlert.threshold * 100).toFixed(3)}%.`;
-        const processedMsg = `Alert command successfully processed. Now we wait for ${parsedAlert.token} to hit our target 😈`;
-        await message.channel.send(confirmationMsg);
-        await message.channel.send(processedMsg);
-      } else {
-        console.log("Processing trade command...");
-        const parsedTrade = await parseTradeCommand(commandText);
-        console.log("Parsed trade command:", parsedTrade);
-        await executeTrade(parsedTrade, message);
-      }
-    } catch (error) {
-      console.error("Failed to process command:", error);
-      await message.channel.send("There was an error processing your command.");
+    // If the command contains the word "alert", process it as an alert; otherwise, treat it as a trade.
+    if (/\balert\b/i.test(commandText)) {
+      console.log("Processing alert command...");
+      const parsedAlert = await parseAlertCommand(commandText);
+      console.log("Parsed alert command:", parsedAlert);
+      await registerAlert(parsedAlert, message);
+      const confirmationMsg = `Alert has been registered successfully! I'll notify you when the price of ${parsedAlert.token} drops by ${(parsedAlert.threshold * 100).toFixed(3)}%.`;
+      const processedMsg = `Alert command successfully processed. Now we wait for ${parsedAlert.token} to hit our target 😈`;
+      await message.channel.send(confirmationMsg);
+      await message.channel.send(processedMsg);
+    } else {
+      console.log("Processing trade command...");
+      const parsedTrade = await parseTradeCommand(commandText);
+      console.log("Parsed trade command:", parsedTrade);
+      await executeTrade(parsedTrade, message);
     }
+  } catch (error) {
+    console.error("Failed to process command:", error);
+    await message.channel.send("There was an error processing your command.");
   }
 });
 
@@ -89,7 +90,7 @@ discordClient.on("messageCreate", async (message) => {
 async function executeTrade(parsedCommand: any, message: any) {
   console.log("Executing trade with parameters from Discord:", parsedCommand);
   try {
-    // Calculate computed minOut.
+    // Compute minOut to provide detailed confirmation to the user.
     const computedMinOut = await computeMinOut(
       parsedCommand.tokenIn,
       parsedCommand.tokenOut,
@@ -102,7 +103,7 @@ async function executeTrade(parsedCommand: any, message: any) {
 Do you want to proceed with this trade? Please reply with 'yes' or 'no'.`;
     await message.channel.send(confirmationMessage);
 
-    // Await confirmation.
+    // Await user confirmation.
     const filter = (m: any) => m.author.id === message.author.id;
     const collected = await message.channel.awaitMessages({
       filter,
@@ -117,10 +118,11 @@ Do you want to proceed with this trade? Please reply with 'yes' or 'no'.`;
       return;
     }
 
+    // Execute the trade.
     const tx = await placeTrade(parsedCommand);
     console.log("Trade executed successfully:", tx);
 
-    // Calculate expected output.
+    // Calculate expected output for a success message.
     const estimatedOutput = await getExpectedOutput(
       parsedCommand.tokenIn,
       parsedCommand.tokenOut,
@@ -154,25 +156,19 @@ async function registerAlert(
     };
     await registerCustomAlert(alertData);
     console.log("Alert registered:", alertData);
-    const confirmationMsg = `Alert has been registered successfully! I'll notify you when the price of ${parsedAlert.token} drops by ${(parsedAlert.threshold * 100).toFixed(3)}%.`;
-    const processedMsg = `Alert command successfully processed. Now we wait for ${parsedAlert.token} to hit our target 😈`;
-    await message.channel.send(confirmationMsg);
-    await message.channel.send(processedMsg);
   } catch (error) {
     console.error("Error registering alert from Discord:", error);
     await message.channel.send("There was an error registering your alert.");
+    return;
   }
 }
 
 async function main() {
   console.log("Starting unified GMX Trading Agent...");
-
   await startDiscordBot();
   console.log("Notification Discord Bot started.");
-
   await discordClient.login(DISCORD_TOKEN);
   console.log("Command Discord Client logged in.");
-
   startAlertMonitoring(10000);
   console.log("Alert monitoring started.");
 }

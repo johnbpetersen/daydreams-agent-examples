@@ -1,110 +1,175 @@
-<p align="center">
-  <img src="/docs/public/Daydreams.png" alt="Daydreams">
-</p>
+⚠️ **Warning**: This is pre‑alpha software under active development. Expect
+frequent breaking changes and bugs. It is currently set up to make live trades
+on the Arbitrum network using real tokens—use at your own risk.
 
-> ⚠️ **Warning**: This is alpha software under active development. Expect
-> frequent breaking changes and bugs. The API is not yet stable.
+# GMX Trading Agent Example
 
-# Cross-chain Generative Agents
+## Overview
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Status](https://img.shields.io/badge/Status-Alpha-orange.svg)]()
-[![Documentation](https://img.shields.io/badge/Documentation-docs-blue.svg)](https://docs.dreams.fun)
-[![Twitter Follow](https://img.shields.io/twitter/follow/daydreamsai?style=social)](https://twitter.com/daydreamsagents)
-[![GitHub stars](https://img.shields.io/github/stars/daydreamsai/daydreams?style=social)](https://github.com/daydreamsai/daydreams)
+The GMX Trading Agent is an example project that demonstrates:
 
-Daydreams is a powerful framework for building generative agents that can
-execute tasks across any blockchain or API.
+- **Natural Language Trades:** Users send trade commands (e.g., “buy 0.77 USDC
+  for WETH with 1% slippage”) via Discord. These commands are parsed and
+  executed on GMX.
+- **Buy Signal Monitoring:** The agent continuously monitors token prices and
+  issues alerts when specified conditions are met (e.g., "alert me when WETH
+  drops by 0.1%").
 
-| Feature                | Description                                                          |
-| ---------------------- | -------------------------------------------------------------------- |
-| 🔗 Chain Agnostic      | Execute transactions and interact with any blockchain network        |
-| 👥 Multi-Expert System | Leverage specialized modules working together to solve complex tasks |
-| 🧠 Context Management  | Simple yet powerful memory and context handling system               |
-| 🎯 Goal-Oriented       | Long-term planning and goal-oriented behavior capabilities           |
-| 💾 Persistent Memory   | Built-in support for storing and retrieving long-term information    |
-| 🤔 Advanced Reasoning  | Multi-step reasoning using Hierarchical Task Networks                |
+This project leverages the
+[Daydreams framework](https://github.com/daydreamsai/daydreams) along with
+Deepseek (via Groq) to convert natural language commands into structured JSON
+parameters for executing trades and setting up alerts.
 
-Want to contribute? Check our
-[issues](https://github.com/daydreamsai/daydreams/issues) for tasks labeled
-`good first issue`.
-
-## Supported Chains
-
-<p> 
-  <a href="#chain-support">
-  <img src="./.github/eth-logo.svg" height="30" alt="Ethereum" style="margin: 0 10px;" />
-  <img src="./.github/arbitrum-logo.svg" height="30" alt="Arbitrum" style="margin: 0 10px;" />
-  <img src="./.github/optimism-logo.svg" height="30" alt="Optimism" style="margin: 0 10px;" />
-  <img src="./.github/solana-logo.svg" height="30" alt="Hyperledger" style="margin: 0 10px;" />
-  <img src="./.github/Starknet.svg" height="30" alt="StarkNet" style="margin: 0 10px;" />
-  <img src="./.github/hl-logo.svg" height="30" alt="Hyperledger" style="margin: 0 10px;" />
-  </a>
-</p>
-
-## Quick Start
+## Installation
 
 ### Prerequisites
 
-- Node.js 18+ using [nvm](https://github.com/nvm-sh/nvm)
+- [Bun](https://bun.sh) (or Node.js if you adapt the scripts)
+- Git
 
-### LLM Keys
+### Setup Steps
 
-You'll need an API key for the LLM you want to use. We recommend using
-[Groq](https://groq.com/) for most use cases.
+1. **Clone the Repository:**
 
-- [OpenAI](https://openai.com/)
-- [Anthropic](https://anthropic.com/)
-- [Groq](https://groq.com/)
-- [Gemini](https://deepmind.google/technologies/gemini/)
+   ```bash
+   git clone https://github.com/yourusername/gmx-trading-agent.git
+   cd gmx-trading-agent
 
-## Your First Dreams Agent
+   ```
 
-```bash
-npm i @daydreamsai/core
-```
+2. **Install Dependencies:**
 
-Dreams agents are all functional. `createDreams` is a function that returns an
-agent object, which can be run with `await agent.run()`. Inject discord,
-telegram, or any other input/output to the agent and define your own actions.
+   ```bash
+   bun install
+   ```
 
-```typescript
-import { createGroq } from "@ai-sdk/groq";
-import { createDreams, cli } from "@daydreamsai/core/v1";
+3. **Enviroment Setup:**
 
-// Initialize Groq client
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY!,
-});
+   ```bash
+   cp .env.example .env
+   ```
 
-// Create Dreams agent instance
-const agent = createDreams({
-  model: groq("deepseek-r1-distill-llama-70b"),
-  extensions: [cli],
-}).start();
-```
+   Fill in the required environment variables:
 
-Now chat via the CLI with the agent.
+   - DISCORD_TOKEN
+   - DISCORD_CHANNEL_ID
+   - GROQ_API_KEY
+   - GMX_RPC_URL
+   - GMX_VAULT_ADDRESS
+   - GMX_ROUTER_ADDRESS
+   - PRIVATE_KEY
 
-Read the [docs](https://docs.dreams.fun) for more information on how to use the
-agent.
+   Refer to the comments in .env.example for guidance on obtaining each key.
 
-### Development
-
-We use [bun](https://bun.sh/) for development.
+### Getting Started
 
 ```bash
-bun install
+bun run src/index.ts
 ```
+
+The unified entry point (src/index.ts) initializes the Discord bot,
+distinguishes between processes for trade and alert commands (which must be sent
+as messages that start with a bot mention), and begins alert monitoring or trade
+execution.
+
+## How to Use on Discord
+
+### Discord Bot Setup
+
+1. Create a [new application](https://discord.com/developers/applications).
+2. Ensure it has proper permissions: send messages, read messsage history, view
+   channels, and embed links.
+3. Copy your bot token and add it to your .env file as DISCORD_TOKEN.
+4. Add the bot to your discord server.
+
+### Trade Command Example:
+
+@GMX-Trading-Agent buy 0.77 USDC for WETH with 1% slippage
+
+The bot will respond with trade details, ask for confirmation, and then execute
+the trade with an Arbiscan confirmation link.
+
+### Alert Command Example:
+
+@GMX-Trading-Agent set up a buy alert for WETH if there's a 0.1% drop
+
+The bot will register the alert and notify you when conditions are met.
+
+## File Structure
+
+```bash
+src/
+├── agents/
+│   └── gmx/
+│       ├── actions/
+│       │   ├── index.ts         # Main trading actions: placeTrade, approveToken, etc.
+│       │   ├── priceOracle.ts   # Price retrieval and computation functions
+│       │   ├── tradeTest.ts     # Test harness for trade commands (optional)
+│       │   └── priceoracletests.ts  # Test harness for price oracle (optional)
+│       ├── alerts/
+│       │   └── alertManager.ts  # Alert registration and monitoring logic
+│       ├── prompts/
+│       │   ├── main.ts          # Natural language trade command parser and schema
+│       │   ├── alert.ts         # Alert command parser and schema
+│       │   └── schema.ts        # Shared schema definitions (if needed)
+│       ├── config.ts            # Global configuration (token addresses, RPC, etc.)
+│       └── index.ts             # Placeholder for GMX‑specific bootstrapping (if needed)
+├── utils/
+│   ├── discord.ts             # Discord bot integration (notifications, command handling)
+│   └── groq.ts                # Groq/Deepseek integration helper
+└── index.ts                 # Unified entry point for the application
+```
+
+## Future Roadmap
+
+While this GMX Trading Agent is fully functional as a demo, there are several
+exciting enhancements possible to continue development:
+
+- **Simplify Decimal Conversions:**  
+  Refine the process for computing `minOut` values to improve accuracy and
+  handle tokens with non‑18 decimals (e.g., WBTC) more gracefully.
+
+- **Upgrade to GMX v2 Contracts:**  
+  Migrate from GMX v1 to v2 contracts to take advantage of improved liquidity,
+  faster updates, and additional features.
+
+- **Enable Futures Trading:**  
+  Extend functionality to support futures trading, allowing the agent to execute
+  a wider range of strategies.
+
+- **Enhanced Daydreams Integration:**  
+  Integrate upcoming Daydreams framework features such as episodic memory and
+  autonomous goal planning to improve strategy reflection and decision-making.
+
+- **Advanced Price Monitoring:**  
+  Implement additional technical indicators (e.g., moving averages, RSI) and
+  integrate external price APIs for more robust signal detection.
+
+- **Autonomous Trading Strategies:**  
+  Develop modules for the agent to autonomously plan, execute, and adjust
+  trading strategies based on market conditions.
+
+- **User Interface Enhancements:**  
+  Consider building a simple web or CLI dashboard to provide real-time trade
+  updates, configuration management, and historical reporting.
+
+- **Community Collaboration:**  
+  Create clear contribution guidelines and a list of “good first issues” to
+  encourage community feedback and collaborative development.
+
+These roadmap items will guide future development, helping transform this
+example into a more sophisticated and autonomous trading system.
+
+## Troubleshooting
+
+- Missing Environment Variables: Ensure your .env file is set up correctly and
+  all required variables are provided.
+- Price Conversion Issues: The computation of minOut can be sensitive,
+  especially for tokens with non‑18 decimals. Review the logs for detailed
+  conversion steps.
+- Discord Command Not Processed: Verify that commands are sent with a proper bot
+  mention (e.g., @GMX Trading Agent ...).
 
 ## Contributing
 
-Looking to contribute? We'd love your help!
-
-If you are a developer and would like to contribute with code, please open an
-issue to discuss before opening a Pull Request.
-
-### Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=daydreamsai/daydreams&type=Date)](https://star-history.com/#daydreamsai/daydreams&Date)
+Looking to contribute? Send a message to jbp3 in the Daydreams Discord.

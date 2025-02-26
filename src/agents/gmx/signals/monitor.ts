@@ -1,24 +1,35 @@
+// src/agents/gmx/signals/monitor.ts
+// -------------------------------------------------------------
+// Description: Monitors token prices via the GMX Vault price oracle.
+//   On first run, sets a baseline price and then calculates the percentage
+//   change from that baseline. If the price drop meets or exceeds the specified
+//   threshold and no alert has yet been triggered, a buy signal is generated
+//   and a Discord notification is sent. The trigger flag resets if the drop condition
+//   is no longer met.
+// Last Update: feat(monitor): Added buy signal detection and notification logic
+// -------------------------------------------------------------
+
 import { getTokenPrice } from "../actions/priceOracle";
 import type { Signal, SignalRule } from "./types";
 import { sendDiscordNotification } from "../../../utils/discord";
 
-// Store the baseline price when the monitor starts.
+// Baseline price when monitoring starts.
 let initialPrice: number | null = null;
 
-// Object to track whether a buy signal has already been triggered per token.
+// Tracks whether a buy signal has been triggered for each token.
 const triggeredSignals: { [token: string]: boolean } = {};
 
 export async function monitorToken(rule: SignalRule): Promise<void> {
   try {
     const currentPrice = await getTokenPrice(rule.token);
 
-    // On first run, set the initial price.
+    // Set the baseline price on the first run.
     if (initialPrice === null) {
       initialPrice = currentPrice;
       console.log(`Initial price for ${rule.token} set at $${initialPrice}`);
     }
 
-    // Calculate the percentage change from the initial price.
+    // Calculate the percentage change from the baseline.
     const priceChange = ((currentPrice - initialPrice) / initialPrice) * 100;
     const formattedChange =
       (priceChange >= 0 ? "+" : "") + priceChange.toFixed(2) + "%";
@@ -29,7 +40,7 @@ export async function monitorToken(rule: SignalRule): Promise<void> {
     // Calculate the percentage drop.
     const percentageDrop = (initialPrice - currentPrice) / initialPrice;
 
-    // If the drop meets/exceeds the threshold and a signal hasn't been triggered yet:
+    // If the drop meets/exceeds the threshold and no alert has been triggered:
     if (percentageDrop >= rule.threshold && !triggeredSignals[rule.token]) {
       const signal: Signal = {
         token: rule.token,
@@ -41,13 +52,13 @@ export async function monitorToken(rule: SignalRule): Promise<void> {
       };
       console.log("Buy signal detected:", signal);
 
-      // Mark this token as triggered so we don't send duplicate notifications.
+      // Mark the token as triggered to prevent duplicate notifications.
       triggeredSignals[rule.token] = true;
 
-      // Send the notification.
+      // Send the Discord notification.
       await sendDiscordNotification(signal);
     }
-    // Optional: reset the triggered flag if the drop condition is no longer met.
+    // Reset the triggered flag if the drop condition is no longer met.
     else if (percentageDrop < rule.threshold) {
       triggeredSignals[rule.token] = false;
     }

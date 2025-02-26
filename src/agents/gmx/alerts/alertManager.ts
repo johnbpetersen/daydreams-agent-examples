@@ -1,10 +1,16 @@
 // src/agents/gmx/alerts/alertManager.ts
+// -------------------------------------------------------------
+// Description: Manages custom alerts for the GMX Trading Agent.
+//   Allows registration of alerts (with baseline prices and thresholds),
+//   monitors registered alerts by comparing current prices to baseline values,
+//   and sends Discord notifications when alert conditions are met.
+// Last Update: feat(alert): Improved alert registration and monitoring logic
+// -------------------------------------------------------------
 
 import { getTokenPrice } from "../actions/priceOracle";
-import { sendDiscordNotification } from "../../../utils/discord"; // Adjust the path if needed
+import { sendDiscordNotification } from "../../../utils/discord";
 
-// Define the Signal interface (if not already defined elsewhere).
-// This should match what sendDiscordNotification expects.
+// Define the Signal interface (used for Discord notifications).
 export interface Signal {
   token: string;
   currentPrice: number;
@@ -17,21 +23,21 @@ export interface Signal {
 // Define the Alert interface.
 export interface Alert {
   token: string; // Token to monitor (e.g., "LINK")
-  threshold: number; // Percentage drop threshold as a decimal (e.g., 0.05 for 5%)
-  customSlippage?: number; // Optional slippage override (if applicable)
+  threshold: number; // Drop threshold as a decimal (e.g., 0.05 for 5%)
+  customSlippage?: number; // Optional slippage override
   userId: string; // Discord user ID who set the alert
-  baselinePrice: number; // Price captured at the time of registration (in USD)
-  triggered: boolean; // Whether the alert has already been triggered
+  baselinePrice: number; // Price at the time of registration (in USD)
+  triggered: boolean; // Whether the alert has been triggered
 }
 
 // In-memory store for alerts.
 const alerts: Alert[] = [];
 
 /**
- * Registers a new alert.
- * Captures the current price as the baseline and stores the alert.
+ * Registers a new alert by capturing the current price as baseline.
  *
  * @param alertData - The alert details (excluding baselinePrice and triggered flag)
+ * @throws An error if the current price cannot be retrieved.
  */
 export async function registerCustomAlert(
   alertData: Omit<Alert, "baselinePrice" | "triggered">
@@ -55,43 +61,37 @@ export async function registerCustomAlert(
 
 /**
  * Monitors all registered alerts.
- * For each alert, checks if the current price has dropped by the specified threshold relative to the baseline.
- * If the condition is met and the alert hasn't been triggered, sends a Discord notification.
- * Optionally, resets the alert trigger if the price recovers.
+ * For each alert, checks if the current price drop meets or exceeds the threshold.
+ * If so, sends a Discord notification and marks the alert as triggered.
+ * If the price recovers above the threshold, resets the triggered flag.
  */
 export async function monitorAlerts(): Promise<void> {
   for (const alert of alerts) {
     try {
       const currentPrice = await getTokenPrice(alert.token);
-      // Calculate percentage drop from the baseline.
       const percentDrop =
         (alert.baselinePrice - currentPrice) / alert.baselinePrice;
       console.log(
-        `DEBUG: Monitoring alert for ${alert.token}: baseline ${alert.baselinePrice} USD, current ${currentPrice} USD, drop ${(percentDrop * 100).toFixed(2)}%`
+        `DEBUG: Monitoring ${alert.token}: baseline ${alert.baselinePrice} USD, current ${currentPrice} USD, drop ${(percentDrop * 100).toFixed(2)}%`
       );
 
-      // If the price drop meets or exceeds the threshold and the alert hasn't been triggered:
       if (percentDrop >= alert.threshold && !alert.triggered) {
         console.log(
-          `DEBUG: Alert condition met for ${alert.token}. Triggering notification for user ${alert.userId}.`
+          `DEBUG: Alert condition met for ${alert.token}. Notifying user ${alert.userId}.`
         );
-        // Construct a Signal object to send via Discord.
         const signal: Signal = {
           token: alert.token,
-          currentPrice: currentPrice,
+          currentPrice,
           averagePrice: alert.baselinePrice,
           percentageDrop: percentDrop,
-          suggestedAction: "BUY", // or adjust as needed
+          suggestedAction: "BUY",
           timestamp: Date.now(),
         };
         await sendDiscordNotification(signal);
-        // Mark the alert as triggered so it doesn't repeatedly notify.
         alert.triggered = true;
-      }
-      // Optionally, if the price recovers above the threshold, reset the alert trigger.
-      else if (percentDrop < alert.threshold && alert.triggered) {
+      } else if (percentDrop < alert.threshold && alert.triggered) {
         console.log(
-          `DEBUG: Alert for ${alert.token} reset as the drop is no longer met.`
+          `DEBUG: Resetting alert for ${alert.token} as price drop is no longer met.`
         );
         alert.triggered = false;
       }
@@ -102,7 +102,7 @@ export async function monitorAlerts(): Promise<void> {
 }
 
 /**
- * Starts periodic monitoring of alerts.
+ * Starts periodic monitoring of registered alerts.
  *
  * @param intervalMs - The interval in milliseconds between checks (default 10000 ms)
  */
