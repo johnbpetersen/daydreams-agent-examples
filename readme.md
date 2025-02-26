@@ -84,7 +84,7 @@ execution.
 
 ### Trade Command Example:
 
-@GMX-Trading-Agent buy 0.77 USDC for WETH with 1% slippage
+@GMX-Trading-Agent swap $1 usdc for weth
 
 The bot will respond with trade details, ask for confirmation, and then execute
 the trade with an Arbiscan confirmation link.
