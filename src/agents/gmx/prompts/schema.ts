@@ -1,9 +1,9 @@
 // src/agents/gmx/prompts/schema.ts
 // -------------------------------------------------------------
 // Description: Defines the Zod schema for parsing trade parameters from
-//   natural language commands. Requires tokenIn, tokenOut, and a positive
+//   natural language commands. It requires tokenIn, tokenOut, and a positive
 //   number for amountIn, with an optional slippage override.
-// Last Update: chore(schema): streamlined trade parameters schema (2025-02-26)
+// Last Update: chore(schema): verified and cleaned up trade parameters schema
 // -------------------------------------------------------------
 
 import { z } from "zod";

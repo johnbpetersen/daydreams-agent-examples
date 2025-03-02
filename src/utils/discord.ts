@@ -1,63 +1,48 @@
 // src/utils/discord.ts
 // -------------------------------------------------------------
-// Description: Encapsulates the Discord integration for the GMX Trading Agent.
-//   Provides functions to start the Discord bot and send notifications (e.g.,
-//   buy signal alerts) to a specified Discord channel.
-// Last Update: chore(discord): Cleaned up logging and added header documentation
+// Description: Provides Discord integration using Daydreams' native
+//   Discord extension for sending notifications. It exposes functions
+//   to set the agent instance and send notifications with buy signal details.
+// Last Update: feat(discord): Updated to use Daydreams core for notifications
 // -------------------------------------------------------------
 
-import { Client, GatewayIntentBits, TextChannel } from "discord.js";
 import type { Signal } from "../agents/gmx/signals/types";
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
-});
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
 
-/**
- * Starts the Discord bot using the provided DISCORD_TOKEN.
- * Logs connection success or error.
- */
-export async function startDiscordBot(): Promise<void> {
-  if (!DISCORD_TOKEN) {
-    console.log("No Discord token found, skipping Discord integration");
-    return;
-  }
-  try {
-    await client.login(DISCORD_TOKEN);
-    console.log("Discord bot connected");
-  } catch (error) {
-    console.error("Failed to start Discord bot:", error);
-  }
+let _agent: any;
+
+export function setAgent(agentInstance: any) {
+  _agent = agentInstance;
 }
 
-/**
- * Sends a Discord notification to the designated channel with the buy signal details.
- *
- * @param signal - The buy signal information including token, current price,
- *                 baseline price, percentage drop, action, and timestamp.
- */
 export async function sendDiscordNotification(signal: Signal): Promise<void> {
-  if (!DISCORD_CHANNEL_ID || !client.isReady()) return;
+  if (!DISCORD_TOKEN || !DISCORD_CHANNEL_ID) {
+    console.log("Discord credentials missing, skipping notification");
+    return;
+  }
+
+  if (!_agent) {
+    console.error("Agent not set. Cannot send notification.");
+    return;
+  }
 
   const messageContent = `🚨 **Buy Signal Detected** 🚨
-    
 **Token:** ${signal.token}
 **Current Price:** $${signal.currentPrice.toFixed(2)}
-**Baseline Price:** $${signal.averagePrice.toFixed(2)}
 **Drop:** ${(signal.percentageDrop * 100).toFixed(2)}%
 **Action:** ${signal.suggestedAction}
 **Time:** ${new Date(signal.timestamp).toLocaleString()}`;
 
   try {
-    const channel = await client.channels.fetch(DISCORD_CHANNEL_ID);
-    if (channel instanceof TextChannel) {
-      await channel.send(messageContent);
-      console.log("Discord notification sent");
-    }
+    const discordClient = _agent.container.resolve("discord") as any;
+    await discordClient.sendMessage({
+      channelId: DISCORD_CHANNEL_ID,
+      content: messageContent,
+    });
+    console.log("Notification sent");
   } catch (error) {
-    console.error("Error sending Discord notification:", error);
+    console.error("Error sending notification:", error);
   }
 }

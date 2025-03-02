@@ -5,7 +5,7 @@
 //   and Router contracts, checks token allowances, and executes swap trades.
 //   Detailed logs trace conversion steps for amount conversion, minOut computation,
 //   and other key parameters.
-// Last Update: feat(actions): Refactored trade execution with detailed conversion logs and allowance checks
+// Last Update: feat(actions): Integrated Daydreams core updates and cleaned up debug logging
 // -------------------------------------------------------------
 
 import { ethers } from "ethers";
@@ -48,10 +48,7 @@ const ERC20_ABI = [
 ];
 
 // --- Contract Instances ---
-// GMX Vault instance (for price data)
 const gmxVault = new ethers.Contract(GMX_VAULT_ADDRESS, VAULT_ABI, provider);
-
-// Instantiate the GMX Router with wallet as signer.
 const gmxRouter = new ethers.Contract(GMX_ROUTER_ADDRESS, ROUTER_ABI, wallet);
 
 /**
@@ -91,7 +88,7 @@ export async function approveToken(
       GMX_ROUTER_ADDRESS,
       amountBN
     );
-    console.log("Approval transaction submitted, waiting for confirmation...");
+    console.log("Approval submitted, waiting for confirmation...");
     await tx.wait();
     console.log("Approval confirmed.");
   } catch (error) {
@@ -120,48 +117,33 @@ export async function placeTrade(
       order.amountIn.toString(),
       tokenInConfig.decimals
     );
-    console.log(`DEBUG: order.amountIn (human-readable): ${order.amountIn}`);
-    console.log(
-      `DEBUG: tokenIn (${order.tokenIn}) decimals: ${tokenInConfig.decimals}`
-    );
-    console.log(`DEBUG: Converted amountInBN: ${amountInBN.toString()}`);
+    console.log(`Order amount: ${order.amountIn} ${order.tokenIn}`);
 
-    // Compute expected output for the trade.
+    // Compute expected output.
     const expectedOutput = await importedGetExpectedOutput(
       order.tokenIn,
       order.tokenOut,
       order.amountIn
     );
-    console.log(
-      `DEBUG: Expected output from getExpectedOutput: ${expectedOutput}`
-    );
+    console.log(`Expected output: ${expectedOutput} ${order.tokenOut}`);
 
-    // Compute minOut using our price oracle.
+    // Compute minOut.
     const computedMinOut = await importedComputeMinOut(
       order.tokenIn,
       order.tokenOut,
       order.amountIn,
       order.slippage ?? 0.02
     );
-    console.log(`DEBUG: Raw computedMinOut: ${computedMinOut}`);
+    console.log(`Computed minOut: ${computedMinOut}`);
 
     // Convert computedMinOut to token units.
     const factor = Math.pow(10, tokenOutConfig.decimals);
     const rawMinOutUnits = Math.floor(computedMinOut * factor);
-    console.log(
-      `DEBUG: Raw computedMinOut in token units (before adjustment): ${computedMinOut * factor}`
-    );
-    console.log(`DEBUG: Floored minOut units (raw): ${rawMinOutUnits}`);
-
-    // For tokens with non-18 decimals, subtract 1 unit for safety.
     let adjustedMinOutUnits = rawMinOutUnits;
     if (tokenOutConfig.decimals !== 18) {
       adjustedMinOutUnits = Math.max(rawMinOutUnits - 1, 0);
-      console.log(
-        `DEBUG: Adjusted minOut units after subtracting 1: ${adjustedMinOutUnits}`
-      );
+      console.log(`Adjusted minOut units: ${adjustedMinOutUnits}`);
     }
-
     const minOutStr = (adjustedMinOutUnits / factor).toFixed(
       tokenOutConfig.decimals
     );
@@ -169,16 +151,15 @@ export async function placeTrade(
 
     console.log(`
 Detailed conversion steps:
-1. Raw computedMinOut: ${computedMinOut}
-2. Computed in token units (raw): ${computedMinOut * factor}
-3. Floored token units: ${rawMinOutUnits}
-4. Adjusted token units: ${adjustedMinOutUnits}
-5. Formatted with decimals: ${minOutStr}
-6. As BigNumber: ${finalMinOutBN.toString()}
-7. Token decimals (tokenOut): ${tokenOutConfig.decimals}
+1. Computed minOut: ${computedMinOut}
+2. Token units (raw): ${computedMinOut * factor}
+3. Floored units: ${rawMinOutUnits}
+4. Adjusted units: ${adjustedMinOutUnits}
+5. Formatted value: ${minOutStr}
+6. Final minOut (BigNumber): ${finalMinOutBN.toString()}
+Token decimals (tokenOut): ${tokenOutConfig.decimals}
 `);
 
-    // Validate minOut value.
     if (
       finalMinOutBN.toString() === "0" ||
       finalMinOutBN.toString() === "225"
@@ -188,7 +169,7 @@ Detailed conversion steps:
       );
     }
 
-    // For non-native tokens, check allowance.
+    // Check token allowance if tokenIn is not ETH.
     if (order.tokenIn.toUpperCase() !== "ETH") {
       const tokenContract = new ethers.Contract(
         tokenInConfig.address,
@@ -200,13 +181,11 @@ Detailed conversion steps:
         GMX_ROUTER_ADDRESS
       );
       console.log(
-        `DEBUG: Current allowance for ${order.tokenIn}: ${currentAllowance}`
+        `Current allowance for ${order.tokenIn}: ${currentAllowance}`
       );
       if (currentAllowance < amountInBN) {
         console.log("Allowance insufficient, approving token...");
         await approveToken(order.tokenIn, order.amountIn);
-      } else {
-        console.log("Sufficient allowance exists.");
       }
     }
 
@@ -219,38 +198,15 @@ Detailed conversion steps:
       );
       const balanceBN: bigint = await tokenContract.balanceOf(wallet.address);
       console.log(
-        `DEBUG: Wallet balance for ${order.tokenIn}: ${balanceBN.toString()}`
+        `Wallet balance for ${order.tokenIn}: ${balanceBN.toString()}`
       );
     }
 
-    // Log the trade parameters.
     console.log("Executing swap with parameters:");
     console.log("Path:", [tokenInConfig.address, tokenOutConfig.address]);
     console.log("Amount In (BigNumber):", amountInBN.toString());
     console.log("Final minOut (BigNumber):", finalMinOutBN.toString());
-    console.log(
-      `DEBUG: tokenIn ${order.tokenIn} decimals: ${tokenInConfig.decimals}`
-    );
-    console.log(
-      `DEBUG: tokenOut ${order.tokenOut} decimals: ${tokenOutConfig.decimals}`
-    );
-    console.log(`DEBUG: amountIn (human-readable): ${order.amountIn}`);
 
-    // Optionally, attempt to call router.getAmountOut for comparison.
-    try {
-      const routerAmountOutBN = await gmxRouter.getAmountOut(
-        tokenInConfig.address,
-        tokenOutConfig.address,
-        amountInBN
-      );
-      console.log(
-        `DEBUG: Router.getAmountOut returned: ${routerAmountOutBN.toString()}`
-      );
-    } catch (err) {
-      console.log("DEBUG: Router.getAmountOut not available or failed", err);
-    }
-
-    // Execute the swap via the GMX Router.
     const tx = await (gmxRouter as any).swap(
       [tokenInConfig.address, tokenOutConfig.address],
       amountInBN,

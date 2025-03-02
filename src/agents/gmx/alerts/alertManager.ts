@@ -1,16 +1,16 @@
 // src/agents/gmx/alerts/alertManager.ts
 // -------------------------------------------------------------
 // Description: Manages custom alerts for the GMX Trading Agent.
-//   Allows registration of alerts (with baseline prices and thresholds),
-//   monitors registered alerts by comparing current prices to baseline values,
-//   and sends Discord notifications when alert conditions are met.
-// Last Update: feat(alert): Improved alert registration and monitoring logic
+//   This module registers alerts, continuously monitors them by comparing
+//   current prices to baseline prices, and sends Discord notifications via
+//   the Daydreams-based notification system when the specified price drop
+//   thresholds are met. It also resets the alert trigger if conditions are no longer met.
+// Last Update: feat(alert): Refactored alert registration and monitoring; integrated Discord notifications via Daydreams
 // -------------------------------------------------------------
 
 import { getTokenPrice } from "../actions/priceOracle";
 import { sendDiscordNotification } from "../../../utils/discord";
 
-// Define the Signal interface (used for Discord notifications).
 export interface Signal {
   token: string;
   currentPrice: number;
@@ -20,7 +20,6 @@ export interface Signal {
   timestamp: number;
 }
 
-// Define the Alert interface.
 export interface Alert {
   token: string; // Token to monitor (e.g., "LINK")
   threshold: number; // Drop threshold as a decimal (e.g., 0.05 for 5%)
@@ -35,7 +34,6 @@ const alerts: Alert[] = [];
 
 /**
  * Registers a new alert by capturing the current price as baseline.
- *
  * @param alertData - The alert details (excluding baselinePrice and triggered flag)
  * @throws An error if the current price cannot be retrieved.
  */
@@ -103,8 +101,7 @@ export async function monitorAlerts(): Promise<void> {
 
 /**
  * Starts periodic monitoring of registered alerts.
- *
- * @param intervalMs - The interval in milliseconds between checks (default 10000 ms)
+ * @param intervalMs - The interval in milliseconds between checks (default is 10000 ms)
  */
 export function startAlertMonitoring(intervalMs: number = 10000): void {
   setInterval(monitorAlerts, intervalMs);

@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
-    "@ai-sdk/groq": "^1.1.7",
+    "@ai-sdk/groq": "^1.1.11",
     "@daydreamsai/core": "^0.2.5",
     "@mendable/firecrawl-js": "^1.16.0",
     "@openrouter/ai-sdk-provider": "^0.2.1",
