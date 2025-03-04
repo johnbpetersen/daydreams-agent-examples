@@ -9,7 +9,7 @@
 // -------------------------------------------------------------
 
 import { getTokenPrice } from "../actions/priceOracle";
-import { sendDiscordNotification } from "../../../utils/discord";
+import { sendGmxNotification } from "../../../utils/discord";
 
 export interface Signal {
   token: string;
@@ -85,7 +85,7 @@ export async function monitorAlerts(): Promise<void> {
           suggestedAction: "BUY",
           timestamp: Date.now(),
         };
-        await sendDiscordNotification(signal);
+        await sendGmxNotification(process.env.DISCORD_CHANNEL_ID!, signal);
         alert.triggered = true;
       } else if (percentDrop < alert.threshold && alert.triggered) {
         console.log(

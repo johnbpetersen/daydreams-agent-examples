@@ -11,7 +11,7 @@
 
 import { getTokenPrice } from "../actions/priceOracle";
 import type { Signal, SignalRule } from "./types";
-import { sendDiscordNotification } from "../../../utils/discord";
+import { sendGmxNotification } from "../../../utils/discord";
 
 // Baseline price when monitoring starts.
 let initialPrice: number | null = null;
@@ -56,7 +56,7 @@ export async function monitorToken(rule: SignalRule): Promise<void> {
       triggeredSignals[rule.token] = true;
 
       // Send the Discord notification.
-      await sendDiscordNotification(signal);
+      await sendGmxNotification(process.env.DISCORD_CHANNEL_ID!, signal);
     }
     // Reset the triggered flag if the drop condition is no longer met.
     else if (percentageDrop < rule.threshold) {

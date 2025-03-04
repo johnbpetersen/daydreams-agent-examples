@@ -15,7 +15,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!, // Use your actual API key here
+  apiKey: process.env.GROQ_API_KEY_GMX!, // Use your actual API key here
 });
 
 // Updated schema now includes a commandType field.

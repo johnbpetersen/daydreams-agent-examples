@@ -1,28 +1,46 @@
-// src/utils/groq.ts
-// -------------------------------------------------------------
-// Description: Provides utility functions to query Deepseek via the Groq SDK.
-//   It parses natural language trading commands and extracts a JSON object
-//   containing trade parameters (tokenIn, tokenOut, amountIn, and minOut).
-// Last Update: chore: Removed fallback defaults for error handling
-// -------------------------------------------------------------
-
 import { Groq } from "groq-sdk";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!, // Ensure GROQ_API_KEY is set in your .env
-});
-
-interface DeepseekResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
+// Initialize a Groq client with a specific API key
+export function createGroqClient(apiKey: string): Groq {
+  return new Groq({ apiKey });
 }
 
+// General-purpose LLM query function with safety checks
+export async function queryLLM(
+  groqClient: Groq,
+  systemPrompt: string,
+  userMessage: string,
+  model: string = "deepseek-r1-distill-llama-70b"
+): Promise<string> {
+  try {
+    const completion = await groqClient.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      model,
+      temperature: 0,
+      max_tokens: 1500,
+    });
+
+    if (!completion.choices || completion.choices.length === 0) {
+      throw new Error("No choices in response from Groq.");
+    }
+    const content = completion.choices[0].message.content;
+    if (!content) {
+      throw new Error("No content in response from Groq.");
+    }
+    return content;
+  } catch (error) {
+    console.error("Error querying LLM:", error);
+    throw error;
+  }
+}
+
+// Trading-specific wrapper (adapted from your queryDeepseek)
 export interface TradeParameters {
   tokenIn: string;
   tokenOut: string;
@@ -30,23 +48,11 @@ export interface TradeParameters {
   minOut: number;
 }
 
-/**
- * queryDeepseek
- *
- * Calls Deepseek via Groq to parse a natural language trading command.
- * It removes <think> tags, splits the response by newline, and extracts the
- * last valid JSON line. The parsed JSON is validated and returned as trade parameters.
- *
- * @param command The natural language trading command.
- * @returns A Promise resolving to structured trade parameters.
- */
-export async function queryDeepseek(command: string): Promise<TradeParameters> {
-  try {
-    const completion = (await groq.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: `You are a JSON-only trading command parser. You must output ONLY the JSON object with no extra commentary.
+export async function parseTradeCommand(
+  groqClient: Groq,
+  command: string
+): Promise<TradeParameters> {
+  const systemPrompt = `You are a JSON-only trading command parser. You must output ONLY the JSON object with no extra commentary.
 WETH = 0x82af49447d8a07e3bd95bd0d56f35241523fbab1
 USDC = 0xff970a61a04b1ca14834a43f5de4533ebddb5cc8
 
@@ -55,59 +61,26 @@ Format: {"tokenIn":"<address>","tokenOut":"<address>","amountIn":<number>,"minOu
 Example input: "buy 0.00015 eth worth of usdc"
 Example output: {"tokenIn":"0x82af49447d8a07e3bd95bd0d56f35241523fbab1","tokenOut":"0xff970a61a04b1ca14834a43f5de4533ebddb5cc8","amountIn":0.00015,"minOut":0.27}
 
-IMPORTANT: Return ONLY the JSON object.`,
-        },
-        {
-          role: "user",
-          content: `Return ONLY a JSON object for: ${command}`,
-        },
-      ],
-      model: "deepseek-r1-distill-llama-70b",
-      temperature: 0,
-      max_tokens: 1500,
-    })) as DeepseekResponse;
+IMPORTANT: Return ONLY the JSON object.`;
+  const userMessage = `Return ONLY a JSON object for: ${command}`;
+  const response = await queryLLM(groqClient, systemPrompt, userMessage);
 
-    // console.log("Full API Response:", JSON.stringify(completion, null, 2));
+  // Parse the response (same logic as your queryDeepseek)
+  const trimmed = response.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  const lines = trimmed.split("\n").map((line) => line.trim());
+  const jsonStr = lines
+    .reverse()
+    .find((line) => line.startsWith("{") && line.endsWith("}"));
+  if (!jsonStr) throw new Error("No valid JSON found in response");
 
-    const content = completion.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("No content in response from Deepseek.");
-    }
-
-    let trimmed = content.trim();
-    // console.log("Raw response:", trimmed);
-
-    // Remove <think> tags.
-    trimmed = trimmed.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-    // console.log("Response after stripping <think> tags:", trimmed);
-
-    // Split by newline and find a valid JSON line (from the bottom).
-    const lines = trimmed.split("\n").map((line) => line.trim());
-    let jsonStr = "";
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i].startsWith("{") && lines[i].endsWith("}")) {
-        jsonStr = lines[i];
-        break;
-      }
-    }
-    if (!jsonStr) {
-      throw new Error("No valid JSON found in response");
-    }
-    // console.log("Extracted JSON:", jsonStr);
-
-    const parsed = JSON.parse(jsonStr);
-    if (
-      !parsed.tokenIn ||
-      !parsed.tokenOut ||
-      typeof parsed.amountIn !== "number" ||
-      typeof parsed.minOut !== "number"
-    ) {
-      throw new Error("Missing required fields in JSON response");
-    }
-    return parsed;
-  } catch (err: any) {
-    console.error("Error parsing trade command:", err);
-    // No fallback defaults: throw error to ensure proper handling.
-    throw err;
+  const parsed = JSON.parse(jsonStr);
+  if (
+    !parsed.tokenIn ||
+    !parsed.tokenOut ||
+    typeof parsed.amountIn !== "number" ||
+    typeof parsed.minOut !== "number"
+  ) {
+    throw new Error("Missing required fields in JSON response");
   }
+  return parsed;
 }
