@@ -9,7 +9,7 @@
 // -------------------------------------------------------------
 
 import { getTokenPrice } from "../actions/priceOracle";
-import { sendGmxNotification } from "../../../utils/discord";
+import { sendGmxNotification } from "../../../utils/discordGmx";
 
 export interface Signal {
   token: string;

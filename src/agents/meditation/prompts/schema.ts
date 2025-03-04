@@ -1,7 +1,8 @@
 // src/agents/meditation/prompts/schema.ts
 // -------------------------------------------------------------
-// Description: Defines the Zod schema for parsing meditation parameters from
-//   natural language commands. It includes theme, setting, and duration as strings.
+// Description: Defines the Zod schema for parsing meditation parameters
+//   from natural language commands. This includes "theme", "setting", and "duration"
+//   (all as strings). This schema ensures that all required fields are provided.
 // Last Update: feat(meditation): Added schema for meditation request parsing
 // -------------------------------------------------------------
 

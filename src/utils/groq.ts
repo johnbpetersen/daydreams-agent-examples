@@ -1,14 +1,35 @@
+// src/utils/groq.ts
+// -------------------------------------------------------------
+// Description: Provides utilities for interacting with the Groq API,
+//   including creating a Groq client, querying the LLM, and parsing
+//   trading commands into structured JSON data.
+// Last Update: feat(core): Updated error messages and cleaned up query logic
+// -------------------------------------------------------------
+
 import { Groq } from "groq-sdk";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-// Initialize a Groq client with a specific API key
+/**
+ * Creates a Groq client with the provided API key.
+ *
+ * @param apiKey - The API key to use for the Groq client.
+ * @returns A Groq client instance.
+ */
 export function createGroqClient(apiKey: string): Groq {
   return new Groq({ apiKey });
 }
 
-// General-purpose LLM query function with safety checks
+/**
+ * Queries the LLM using the Groq client and returns the raw content.
+ *
+ * @param groqClient - The Groq client instance.
+ * @param systemPrompt - The system prompt setting the context.
+ * @param userMessage - The user message.
+ * @param model - The model to use (default: "deepseek-r1-distill-llama-70b").
+ * @returns The response content as a string.
+ */
 export async function queryLLM(
   groqClient: Groq,
   systemPrompt: string,
@@ -40,7 +61,9 @@ export async function queryLLM(
   }
 }
 
-// Trading-specific wrapper (adapted from your queryDeepseek)
+/**
+ * Interface representing the parsed trade parameters.
+ */
 export interface TradeParameters {
   tokenIn: string;
   tokenOut: string;
@@ -48,6 +71,13 @@ export interface TradeParameters {
   minOut: number;
 }
 
+/**
+ * Parses a natural language trading command using Groq and returns structured trade parameters.
+ *
+ * @param groqClient - The Groq client instance.
+ * @param command - The trading command to parse.
+ * @returns The parsed trade parameters.
+ */
 export async function parseTradeCommand(
   groqClient: Groq,
   command: string
@@ -65,8 +95,9 @@ IMPORTANT: Return ONLY the JSON object.`;
   const userMessage = `Return ONLY a JSON object for: ${command}`;
   const response = await queryLLM(groqClient, systemPrompt, userMessage);
 
-  // Parse the response (same logic as your queryDeepseek)
+  // Remove any <think> tags and trim the response
   const trimmed = response.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  // Split by new lines and reverse to find the last valid JSON string
   const lines = trimmed.split("\n").map((line) => line.trim());
   const jsonStr = lines
     .reverse()

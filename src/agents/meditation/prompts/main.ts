@@ -15,10 +15,14 @@ const groq = new Groq({
 });
 
 /**
- * parseMeditationRequest
+ * Parses a natural language meditation request into structured parameters.
  *
- * Calls Groq's LLM to parse a natural language meditation request into a JSON object
- * with theme, setting, and duration. Uses best-guess logic to fill gaps.
+ * Calls Groq's LLM to convert the user's request into a JSON object with the keys:
+ * - theme (string): Main focus or emotion (e.g., "peace", "focus"). Defaults to "relaxation".
+ * - setting (string): Imagined location (e.g., "forest", "beach"). Defaults to "nature".
+ * - duration (string): Length of the meditation (e.g., "5 minutes"). Defaults to "5 minutes".
+ *
+ * Returns ONLY the JSON object wrapped in a markdown code block with "json".
  *
  * @param request The natural language meditation request.
  * @returns A Promise resolving to meditation parameters.
@@ -85,7 +89,7 @@ Example output:
     return validated;
   } catch (error) {
     console.error("Meditation request parsing error:", error);
-    // Fallback with LLM-like best guess
+    // Fallback with best-guess values
     return { theme: "relaxation", setting: "nature", duration: "5 minutes" };
   }
 }

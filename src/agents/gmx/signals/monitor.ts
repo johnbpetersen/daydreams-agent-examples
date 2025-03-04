@@ -11,7 +11,7 @@
 
 import { getTokenPrice } from "../actions/priceOracle";
 import type { Signal, SignalRule } from "./types";
-import { sendGmxNotification } from "../../../utils/discord";
+import { sendGmxNotification } from "../../../utils/discordGmx";
 
 // Baseline price when monitoring starts.
 let initialPrice: number | null = null;
