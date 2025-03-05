@@ -7,7 +7,7 @@
  *   This version uses the Daydreams native Discord integration for command handling,
  *   refined ElevenLabs TTS integration (using fs/promises for file operations), and
  *   includes temporary file cleanup.
- * Last Update: feat(meditation): Updated header; refined audio generation and cleanup logic;
+ * Last Update: feat(meditation): Refined audio generation and cleanup logic;
  *   integrated standard opening and closing cues.
  * -------------------------------------------------------------
  */
@@ -291,8 +291,6 @@ async function generateSpokenAudio(
   } catch (error) {
     console.error(`[generateSpokenAudio] Error:`, error);
     throw error;
-  } finally {
-    await cleanupTempFiles(tempFiles.filter((f) => f !== outputPath));
   }
 }
 
