@@ -7,8 +7,8 @@
  *   This version uses the Daydreams native Discord integration for command handling,
  *   refined ElevenLabs TTS integration (using fs/promises for file operations), and
  *   includes temporary file cleanup.
- * Last Update: feat(meditation): Refined audio generation and cleanup logic;
- *   integrated standard opening and closing cues.
+ * Last Update: feat(meditation): Fixed "undefined" issue in script generation;
+ *   ensured 30s silence before final "open your eyes" instruction.
  * -------------------------------------------------------------
  */
 
@@ -91,12 +91,27 @@ Use soft, evocative language—think gentle, flowing, vivid imagery—and keep t
     const standardOpening =
       "Let’s begin as we always do. Take a deep breath in, and as you exhale, let go of your surroundings, your thoughts, and anything pulling you from this moment. Focus on connecting to your breath as we start our journey.";
     const sections = llmScript.split("\n\n").filter((s) => s.trim().length > 0);
-    const closingParts = sections[sections.length - 1].split(
-      "Take one final, deep breath"
-    );
-    const script = `${sections[0]}\n\n${standardOpening}\n\n${sections.slice(1, -1).join("\n\n")}\n\n${closingParts[0]}\n\nTake one final, deep breath${closingParts[1]}`;
+
+    // Fix "undefined" issue and ensure proper closing
+    const lastSection = sections[sections.length - 1];
+    const closingParts = lastSection.split("Take one final, deep breath");
+    let closing = closingParts[0].trim();
+    if (closingParts.length > 1) {
+      console.log("Found 'Take one final, deep breath' in closing section.");
+      closing += "\n\nTake one final, deep breath" + closingParts[1].trim();
+    } else {
+      console.log(
+        "No 'Take one final, deep breath' found; using last section as is."
+      );
+      closing = lastSection.trim();
+    }
+
+    const script = `${sections[0].trim()}\n\n${standardOpening}\n\n${sections
+      .slice(1, -1)
+      .map((s) => s.trim())
+      .join("\n\n")}\n\n${closing}`;
     console.log(
-      "Generated script with standard opening and split closing:",
+      "Generated script with standard opening and adjusted closing:",
       script
     );
 
@@ -146,7 +161,7 @@ Use soft, evocative language—think gentle, flowing, vivid imagery—and keep t
         if (i === 0)
           trailingSilence = "3s"; // After Summary Intro
         else if (i === finalSections.length - 2)
-          trailingSilence = "30s"; // Before final breath
+          trailingSilence = "30s"; // Before final "open your eyes"
         else if (i === finalSections.length - 1)
           trailingSilence = "10s"; // End
         else trailingSilence = "5s"; // Middle sections
